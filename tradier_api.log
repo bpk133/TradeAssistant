@@ -1,0 +1,10 @@
+2023-09-01 14:09:53 DEBUG Starting new HTTPS connection (1): api.tradier.com:443
+2023-09-01 14:09:54 DEBUG https://api.tradier.com:443 "GET /v1/accounts/6YA37932/balances HTTP/1.1" 200 None
+2023-09-01 14:11:14 DEBUG Starting new HTTPS connection (1): api.tradier.com:443
+2023-09-01 14:11:14 DEBUG https://api.tradier.com:443 "GET /v1/accounts/6YA37932/balances HTTP/1.1" 200 None
+2023-09-01 14:15:27 DEBUG Starting new HTTPS connection (1): api.tradier.com:443
+2023-09-01 14:15:40 DEBUG https://api.tradier.com:443 "GET /v1/accounts/6YA37932/orders?includeTags=true HTTP/1.1" 200 17
+2023-09-01 14:16:56 DEBUG Starting new HTTPS connection (1): api.tradier.com:443
+2023-09-01 14:16:57 DEBUG https://api.tradier.com:443 "GET /v1/accounts/6YA37932/balances HTTP/1.1" 200 None
+2023-09-03 00:34:08 DEBUG Starting new HTTPS connection (1): api.tradier.com:443
+2023-09-03 00:34:09 DEBUG https://api.tradier.com:443 "GET /v1/accounts/6YA37932/balances HTTP/1.1" 200 None
