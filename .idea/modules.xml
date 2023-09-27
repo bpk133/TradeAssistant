@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/Tradier_Brokerage_Trading_App.iml" filepath="$PROJECT_DIR$/.idea/Tradier_Brokerage_Trading_App.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/TradeAssistant.iml" filepath="$PROJECT_DIR$/.idea/TradeAssistant.iml" />
     </modules>
   </component>
 </project>

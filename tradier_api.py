@@ -1,6 +1,6 @@
 import requests
 from requests.exceptions import RequestException
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timedelta
 from dateutil.relativedelta import relativedelta
 from typing import Union, List, Dict
 from creds import tradier_api_creds
@@ -232,7 +232,7 @@ class TradierApiBase:
         return None if results is None else results.get('order', None)
 
 
-class UserProfile:
+class UserProfileResponse:
 
     def __init__(self, **kwargs):
         self.account_number = kwargs.get('account_number', None)
@@ -357,57 +357,90 @@ class AccountBalances:
         self.pdt = PdtBalances(**kwargs.get('pdt', {}))
 
 
-class MarketStateTimes:
+class MarketState:
 
-    def __init__(self, cal_date: date, start: str = '00:00:00', end: str = '00:00:00'):
-        self._start = datetime.combine(date=cal_date, time=time.fromisoformat(start))
-        self._end = datetime.combine(date=cal_date, time=time.fromisoformat(end))
+    def __init__(self, name: str, tradeable: bool, start_dts: datetime, end_dts: datetime):
+        self.name = name
+        self.tradeable = tradeable
+        self.start_dts = start_dts
+        self.end_dts = end_dts
+        self.id = f'{self.name}_{self.start_dts.timestamp()}'
 
-    @property
-    def start(self):
-        return self._start
+    def __lt__(self, other):
+        return None if not isinstance(other, MarketState) else self.start_dts < other.start_dts
 
-    @property
-    def end(self):
-        return self._end
+    def __le__(self, other):
+        return None if not isinstance(other, MarketState) else self.start_dts <= other.start_dts
+
+    def __gt__(self, other):
+        return None if not isinstance(other, MarketState) else self.start_dts > other.start_dts
+
+    def __ge__(self, other):
+        return None if not isinstance(other, MarketState) else self.start_dts >= other.start_dts
 
 
 class MarketCalendarDay:
 
     def __init__(self, **kwargs):
-        self._date = kwargs.get('date')
+        self._date = date.fromisoformat(kwargs.get('date'))
         self.status = kwargs.get('status')
         self.description = kwargs.get('description')
-        self.premarket = MarketStateTimes(cal_date=self.date(), **kwargs.get('premarket', {}))
-        self.open_market = MarketStateTimes(cal_date=self.date(), **kwargs.get('open', {}))
-        self.post_market = MarketStateTimes(cal_date=self.date(), **kwargs.get('premarket', {}))
+        self.start_of_day = datetime.combine(date=self._date, time=time(hour=0, minute=0, second=0))
+        self.end_of_day = self.start_of_day + timedelta(days=1)
+        premarket_start = kwargs.get('premarket', {}).get('start', None)
+        # premarket_end = kwargs.get('premarket', {}).get('end', None)
+        open_start = kwargs.get('open', {}).get('start', None)
+        open_end = kwargs.get('open', {}).get('end', None)
+        # postmarket_start = kwargs.get('postmarket', {}).get('start', None)
+        postmarket_end = kwargs.get('postmarket', {}).get('end', None)
+        self.premarket_open = datetime.combine(date=self.date, time=time.fromisoformat(premarket_start)) if premarket_start else None
+        self.market_open = datetime.combine(date=self.date, time=time.fromisoformat(open_start)) if open_start else None
+        self.market_close = datetime.combine(date=self.date, time=time.fromisoformat(open_end)) if open_end else None
+        self.postmarket_close = datetime.combine(date=self.date, time=time.fromisoformat(postmarket_end)) if postmarket_end else None
+        self.market_states = []
+        if kwargs.get('status') == 'open':
+            self.market_states.append(MarketState(name='prepremarket', tradeable=False, start_dts=self.start_of_day, end_dts=self.premarket_open))
+            self.market_states.append(MarketState(name='premarket', tradeable=False, start_dts=self.premarket_open,
+                                                  end_dts=self.market_open))
+            self.market_states.append(MarketState(name='open', tradeable=True, start_dts=self.market_open,
+                                                  end_dts=self.market_close))
+            self.market_states.append(MarketState(name='postmarket', tradeable=False, start_dts=self.market_close,
+                                                  end_dts=self.postmarket_close))
+            self.market_states.append(MarketState(name='postpostmarket', tradeable=False, start_dts=self.postmarket_close,
+                                                  end_dts=self.end_of_day))
+        else:
+            self.market_states.append(MarketState(name='Closed all day', tradeable=False, start_dts=self.start_of_day, end_dts=self.end_of_day))
 
-    def date(self):
-        return date.fromisoformat(self._date)
+    @property
+    def date(self) -> date:
+        return self._date
 
-    def is_market_open_day(self):
+    def is_market_day(self) -> bool:
         return self.status == 'open'
 
-    def late_open(self):
-        return None if not self.is_market_open_day() else self.open_market.start.time() > time(hour=9, minute=30)
+    def late_open(self) -> bool:
+        return None if not self.is_market_day() else self.market_open.time() > time(hour=9, minute=30)
 
-    def early_close(self):
-        return None if not self.is_market_open_day() is None else self.open_market.end.time() < time(hour=16, minute=0)
+    def early_close(self) -> bool:
+        return None if not self.is_market_day() is None else self.market_close.time() < time(hour=16, minute=0)
+
+    def get_market_state_at_time(self, eval_ts: time):
+        return [x for x in self.market_states if x.start_dts.time() <= eval_ts < x.end_dts.time()][0]
 
     def __repr__(self):
-        return f'MarketCalendarDay(date={self.date().isoformat()}, status={self.status})'
+        return f'MarketCalendarDay(date={self.date.isoformat()}, status={self.status})'
 
     def __lt__(self, other):
-        return None if not isinstance(other, MarketCalendarDay) else self.date() < other.date()
+        return None if not isinstance(other, MarketCalendarDay) else self.date < other.date
 
     def __le__(self, other):
-        return None if not isinstance(other, MarketCalendarDay) else self.date() <= other.date()
+        return None if not isinstance(other, MarketCalendarDay) else self.date <= other.date
 
     def __gt__(self, other):
-        return None if not isinstance(other, MarketCalendarDay) else self.date() > other.date()
+        return None if not isinstance(other, MarketCalendarDay) else self.date > other.date
 
     def __ge__(self, other):
-        return None if not isinstance(other, MarketCalendarDay) else self.date() >= other.date()
+        return None if not isinstance(other, MarketCalendarDay) else self.date >= other.date
 
 
 class TradierApi(TradierApiBase):
@@ -442,8 +475,11 @@ class TradierApi(TradierApiBase):
 
 class MarketCalendar:
 
-    def __init__(self, calendar_days: List[MarketCalendarDay]):
-        self._days = calendar_days
+    def __init__(self, base_date: Union[date, None] = None, mo_hist: int = 3, mo_fut: int = 3):
+        if base_date is None:
+            base_date = date.today()
+        self._days = TradierApi.get_market_calendar_range(base_date=base_date, mo_hist=mo_hist, mo_fut=mo_fut)
+        self._days.sort()
 
     @property
     def days(self) -> List[MarketCalendarDay]:
@@ -451,19 +487,44 @@ class MarketCalendar:
 
     @property
     def days_dict(self) -> Dict[date, MarketCalendarDay]:
-        return {d.date(): d for d in self.days}
+        return {d.date: d for d in self.days}
 
     def get_day(self, day: Union[date, datetime, MarketCalendarDay]) -> MarketCalendarDay:
         if isinstance(day, datetime) or isinstance(day, MarketCalendarDay):
-            day = day.date()
+            day = day.date
         return self.days_dict.get(day, None)
+
+    def get_future_market_states(self, eval_dts: datetime) -> List[MarketState]:
+        market_states = []
+        for d in self.days:
+            if d.date >= eval_dts.date():
+                for ms in d.market_states:
+                    if ms.start_dts >= eval_dts:
+                        market_states.append(ms)
+        market_states.sort()
+        return market_states
+
+    def get_tradeable_future_market_states(self, eval_dts: datetime) -> List[MarketState]:
+        return [ms for ms in self.get_future_market_states(eval_dts=eval_dts) if ms.tradeable]
+
+    def get_non_tradeable_future_market_states(self, eval_dts: datetime) -> List[MarketState]:
+        return [ms for ms in self.get_future_market_states(eval_dts=eval_dts) if not ms.tradeable]
+
+    def get_market_state(self, eval_dts: datetime, n_future: int = 0) -> MarketState:
+        return self.get_future_market_states(eval_dts=eval_dts)[n_future]
+
+    def get_tradeable_market_state(self, eval_dts: datetime, n_future: int = 0) -> MarketState:
+        return self.get_tradeable_future_market_states(eval_dts=eval_dts)[n_future]
+
+    def get_non_tradeable_market_state(self, eval_dts: datetime, n_future: int = 0) -> MarketState:
+        return self.get_non_tradeable_future_market_states(eval_dts=eval_dts)[n_future]
 
     def get_next_open_day(self, start_day: Union[date, datetime, MarketCalendarDay]) -> MarketCalendarDay:
         if isinstance(start_day, datetime):
             start_day = start_day.date()
         elif isinstance(start_day, MarketCalendarDay):
-            start_day = start_day.date()
-        day_list = [d for d in self.days if d.date() > start_day and d.is_market_open_day()]
+            start_day = start_day.date
+        day_list = [d for d in self.days if d.date > start_day and d.is_market_day()]
         day_list.sort()
         return day_list[0]
 
